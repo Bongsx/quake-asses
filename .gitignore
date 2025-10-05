@@ -20,7 +20,6 @@ backend/dist-ssr/
 *.local
 frontend/.env
 frontend/utils/
-backend/.env
 backend/serviceAccountKey.json
 
 # Editor directories and files

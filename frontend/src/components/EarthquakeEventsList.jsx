@@ -14,6 +14,10 @@ import { getDatabase, ref, onValue } from "firebase/database";
 import React from "react";
 import { useNavigate } from "react-router-dom";
 
+// Mapbox token
+const MAPBOX_TOKEN =
+  "pk.eyJ1IjoiamJvbmd6MTQiLCJhIjoiY21nZGQ3dmRuMTA2cDJpcG5wa3J5NzNxNiJ9.908ap0Vz0J4Ru_aCO1ByAg";
+
 const EarthquakeEventsList = () => {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -44,7 +48,7 @@ const EarthquakeEventsList = () => {
     return () => unsub();
   }, []);
 
-  // Fetch detailed location information
+  // Fetch detailed location information using Mapbox
   useEffect(() => {
     const fetchLocationDetails = async () => {
       for (const ev of events) {
@@ -52,26 +56,23 @@ const EarthquakeEventsList = () => {
 
         try {
           const response = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${ev.latitude}&lon=${ev.longitude}&zoom=18&addressdetails=1`,
-            {
-              headers: {
-                "User-Agent": "earthquake-monitor/1.0",
-              },
-            }
+            `https://api.mapbox.com/geocoding/v5/mapbox.places/${ev.longitude},${ev.latitude}.json?access_token=${MAPBOX_TOKEN}&types=place,locality,neighborhood,address`
           );
 
           if (response.ok) {
             const data = await response.json();
+            const placeName = data.features[0]?.place_name || ev.place;
             setLocationDetails((prev) => ({
               ...prev,
-              [ev.id]: data,
+              [ev.id]: placeName,
             }));
           }
-        } catch (error) {
-          console.error("Error fetching location:", error);
+        } catch (err) {
+          console.error("Error fetching location:", err);
         }
 
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        // Small delay to prevent hitting Mapbox rate limits
+        await new Promise((resolve) => setTimeout(resolve, 500));
       }
     };
 
@@ -80,43 +81,16 @@ const EarthquakeEventsList = () => {
     }
   }, [events, locationDetails]);
 
-  // Format detailed location
   const getDetailedLocation = (ev) => {
-    const details = locationDetails[ev.id];
-    if (!details || !details.address) {
-      return ev.place || "Unknown Location";
-    }
-
-    const addr = details.address;
-    const parts = [];
-
-    if (addr.suburb || addr.neighbourhood || addr.village || addr.hamlet) {
-      const barangay =
-        addr.suburb || addr.neighbourhood || addr.village || addr.hamlet;
-      parts.push(`Brgy. ${barangay}`);
-    }
-
-    if (addr.city || addr.town || addr.municipality) {
-      parts.push(addr.city || addr.town || addr.municipality);
-    }
-
-    if (addr.state || addr.province) {
-      parts.push(addr.state || addr.province);
-    }
-
-    return parts.length > 0
-      ? parts.join(", ")
-      : details.display_name || ev.place;
+    return locationDetails[ev.id] || ev.place || "Unknown Location";
   };
 
   // Filter events by region
   const filterByRegion = (event) => {
     if (selectedRegion === "all") return true;
-
     const region = regions[selectedRegion];
     const lat = event.latitude;
     const lon = event.longitude;
-
     return (
       lat >= region.lat[0] &&
       lat <= region.lat[1] &&
@@ -128,12 +102,10 @@ const EarthquakeEventsList = () => {
   // Filter events by search query
   const filterBySearch = (event) => {
     if (!searchQuery) return true;
-
     const query = searchQuery.toLowerCase();
     const location = getDetailedLocation(event).toLowerCase();
     const place = (event.place || "").toLowerCase();
     const magnitude = event.magnitude.toString();
-
     return (
       location.includes(query) ||
       place.includes(query) ||
@@ -150,18 +122,15 @@ const EarthquakeEventsList = () => {
   const getStats = () => {
     if (filteredEvents.length === 0)
       return { total: 0, avgMag: 0, recent24h: 0 };
-
     const total = filteredEvents.length;
     const avgMag = (
       filteredEvents.reduce((sum, ev) => sum + (ev.magnitude || 0), 0) / total
     ).toFixed(1);
-
     const now = Date.now();
     const oneDayAgo = now - 24 * 60 * 60 * 1000;
     const recent24h = filteredEvents.filter(
       (ev) => ev.time >= oneDayAgo
     ).length;
-
     return { total, avgMag, recent24h };
   };
 
@@ -209,7 +178,7 @@ const EarthquakeEventsList = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-gray-50 to-blue-100 py-6 px-4">
       <div className="max-w-7xl mx-auto">
-        {/* Header with Back Button */}
+        {/* Header */}
         <div className="mb-6 flex items-center justify-between">
           <div>
             <h1 className="text-4xl font-bold text-gray-900 mb-2 flex items-center gap-3">
@@ -221,7 +190,7 @@ const EarthquakeEventsList = () => {
             </p>
           </div>
           <button
-            onClick={() => navigate(-1)} // goes back one step in history
+            onClick={() => navigate(-1)}
             className="flex items-center gap-2 px-6 py-3 bg-white border-2 border-blue-600 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition-all duration-200 font-semibold shadow-md hover:shadow-lg"
           >
             <ArrowLeft className="w-5 h-5" />
@@ -268,10 +237,9 @@ const EarthquakeEventsList = () => {
           </div>
         </div>
 
-        {/* Search and Filter Section */}
+        {/* Search and Filter */}
         <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
           <div className="flex flex-col md:flex-row gap-4">
-            {/* Search Bar */}
             <div className="flex-1 relative">
               <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
               <input
@@ -291,7 +259,6 @@ const EarthquakeEventsList = () => {
               )}
             </div>
 
-            {/* Region Filter */}
             <div className="flex gap-2 flex-wrap md:flex-nowrap">
               {Object.entries(regions).map(([key, value]) => (
                 <button
@@ -309,7 +276,6 @@ const EarthquakeEventsList = () => {
             </div>
           </div>
 
-          {/* Filter Info */}
           {(searchQuery || selectedRegion !== "all") && (
             <div className="mt-4 flex items-center gap-2 text-sm text-gray-600">
               <Filter className="w-4 h-4" />

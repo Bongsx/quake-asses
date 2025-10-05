@@ -5,6 +5,9 @@ import { Activity, TrendingUp, Clock, MapPin } from "lucide-react";
 import AiAlert from "./AiAlert";
 import { useNavigate } from "react-router-dom";
 
+const MAPBOX_TOKEN =
+  "pk.eyJ1IjoiamJvbmd6MTQiLCJhIjoiY21nZGQ3dmRuMTA2cDJpcG5wa3J5NzNxNiJ9.908ap0Vz0J4Ru_aCO1ByAg";
+
 export default function Dashboard() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -22,7 +25,7 @@ export default function Dashboard() {
     return () => unsub();
   }, []);
 
-  // Fetch detailed location information
+  // Fetch detailed location using Mapbox
   useEffect(() => {
     const fetchLocationDetails = async () => {
       for (const ev of events) {
@@ -30,27 +33,22 @@ export default function Dashboard() {
 
         try {
           const response = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${ev.latitude}&lon=${ev.longitude}&zoom=18&addressdetails=1`,
-            {
-              headers: {
-                "User-Agent": "earthquake-monitor/1.0",
-              },
-            }
+            `https://api.mapbox.com/geocoding/v5/mapbox.places/${ev.longitude},${ev.latitude}.json?access_token=${MAPBOX_TOKEN}&types=place,locality,neighborhood,address`
           );
 
           if (response.ok) {
             const data = await response.json();
+            const placeName = data.features[0]?.place_name || ev.place;
             setLocationDetails((prev) => ({
               ...prev,
-              [ev.id]: data,
+              [ev.id]: placeName,
             }));
           }
         } catch (error) {
           console.error("Error fetching location:", error);
         }
 
-        // Rate limiting: wait 1 second between requests
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        await new Promise((resolve) => setTimeout(resolve, 500)); // Rate limiting
       }
     };
 
@@ -59,39 +57,10 @@ export default function Dashboard() {
     }
   }, [events]);
 
-  // Format detailed location
   const getDetailedLocation = (ev) => {
-    const details = locationDetails[ev.id];
-    if (!details || !details.address) {
-      return ev.place || "Unknown Location";
-    }
-
-    const addr = details.address;
-    const parts = [];
-
-    // Add barangay/suburb/neighbourhood
-    if (addr.suburb || addr.neighbourhood || addr.village || addr.hamlet) {
-      const barangay =
-        addr.suburb || addr.neighbourhood || addr.village || addr.hamlet;
-      parts.push(`Brgy. ${barangay}`);
-    }
-
-    // Add city/municipality
-    if (addr.city || addr.town || addr.municipality) {
-      parts.push(addr.city || addr.town || addr.municipality);
-    }
-
-    // Add province/state
-    if (addr.state || addr.province) {
-      parts.push(addr.state || addr.province);
-    }
-
-    return parts.length > 0
-      ? parts.join(", ")
-      : details.display_name || ev.place;
+    return locationDetails[ev.id] || "Loading precise location...";
   };
 
-  // Calculate statistics
   const getStats = () => {
     if (events.length === 0) return { total: 0, avgMag: 0, recent24h: 0 };
 
@@ -216,7 +185,6 @@ export default function Dashboard() {
                   : "text-green-600";
 
               const detailedLocation = getDetailedLocation(ev);
-              const isLoadingLocation = !locationDetails[ev.id];
 
               return (
                 <div
@@ -238,13 +206,7 @@ export default function Dashboard() {
                       <MapPin className="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" />
                       <div className="flex-1">
                         <h4 className="font-bold text-gray-900 text-base mb-1">
-                          {isLoadingLocation ? (
-                            <span className="text-gray-400 animate-pulse">
-                              Loading precise location...
-                            </span>
-                          ) : (
-                            detailedLocation
-                          )}
+                          {detailedLocation}
                         </h4>
                         <div className="text-sm text-gray-600">
                           <span>Depth: {ev.depth || "N/A"} km</span>

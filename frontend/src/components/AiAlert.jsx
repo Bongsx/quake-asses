@@ -21,7 +21,8 @@ import React from "react";
 
 const AiAlert = () => {
   const [analysis, setAnalysis] = useState(null);
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isAnalysisExpanded, setIsAnalysisExpanded] = useState(false);
+  const [isSafetyExpanded, setIsSafetyExpanded] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -141,52 +142,418 @@ const AiAlert = () => {
       <div className="p-6">
         {analysis ? (
           <div className="space-y-4">
-            {/* Risk Level Badge */}
-            <div className="flex items-center gap-3">
-              <div
-                className={`inline-flex items-center gap-2 px-4 py-2 rounded-full ${riskLevel.bg} ${riskLevel.border} border-2`}
-              >
-                <Gauge className={`w-4 h-4 ${riskLevel.text}`} />
-                <span className={`font-bold text-sm ${riskLevel.text}`}>
-                  {riskLevel.label}
-                </span>
-              </div>
+            {/* Executive Summary - Enhanced Visual Cards */}
+            {(() => {
+              if (!analysis.analysis) return null;
 
-              {analysis.confidenceLevel && (
-                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-50 border-2 border-blue-200">
-                  <BarChart3 className="w-4 h-4 text-blue-600" />
-                  <span className="font-bold text-sm text-blue-700">
-                    {Math.round(analysis.confidenceLevel * 100)}% Confidence
-                  </span>
-                </div>
-              )}
-            </div>
+              const execMatch = analysis.analysis.match(
+                /### \*\*Executive Summary\*\*([\s\S]*?)(?=###|$)/
+              );
+              if (!execMatch) return null;
 
-            {/* Main Analysis */}
-            <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg p-5 border border-gray-200">
-              <div className="flex items-start gap-3 mb-3">
-                <AlertTriangle className="w-6 h-6 text-orange-600 flex-shrink-0 mt-1" />
-                <div className="flex-1">
-                  <h3 className="font-bold text-gray-900 text-lg mb-2">
-                    Current Assessment
-                  </h3>
-                  <div className="prose prose-sm max-w-none">
-                    <p className="text-gray-800 leading-relaxed whitespace-pre-wrap">
-                      {analysis.analysis}
-                    </p>
+              const execText = execMatch[1].trim();
+
+              // Extract key numbers and facts
+              const totalEvents = execText.match(
+                /total of \*\*(\d+) earthquake events?\*\*/
+              )?.[1];
+              const mainLocation = execText.match(
+                /observed in \*\*([^*]+)\*\*/
+              )?.[1];
+              const magnitudeRange = execText.match(/\(M([\d.]+)-M([\d.]+)\)/);
+
+              // Clean the text by removing markdown asterisks
+              const cleanText = execText.replace(/\*\*/g, "");
+
+              return (
+                <div className="space-y-4">
+                  {/* Executive Summary Header */}
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-2 rounded-lg shadow-md">
+                      <BarChart3 className="w-5 h-5 text-white" />
+                    </div>
+                    <h3 className="text-xl font-bold text-gray-900">
+                      Executive Summary
+                    </h3>
+                  </div>
+
+                  {/* Key Metrics Row - Enhanced */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {totalEvents && (
+                      <div className="relative overflow-hidden bg-gradient-to-br from-orange-500 to-red-600 rounded-xl p-5 shadow-lg transform hover:scale-105 transition-transform">
+                        <div className="absolute top-0 right-0 w-24 h-24 bg-white opacity-10 rounded-full -mr-8 -mt-8"></div>
+                        <div className="relative">
+                          <div className="flex items-center gap-2 mb-3">
+                            <Activity className="w-5 h-5 text-white" />
+                            <span className="text-xs font-semibold text-white uppercase tracking-wide">
+                              Recent Activity
+                            </span>
+                          </div>
+                          <p className="text-5xl font-extrabold text-white mb-1">
+                            {totalEvents}
+                          </p>
+                          <p className="text-sm text-white text-opacity-90 font-medium">
+                            earthquake events detected
+                          </p>
+                          <div className="mt-3 pt-3 border-t border-white border-opacity-20">
+                            <p className="text-xs text-white text-opacity-80">
+                              Last 1 hour period
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {mainLocation && (
+                      <div className="relative overflow-hidden bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl p-5 shadow-lg transform hover:scale-105 transition-transform">
+                        <div className="absolute bottom-0 left-0 w-32 h-32 bg-white opacity-10 rounded-full -ml-12 -mb-12"></div>
+                        <div className="relative">
+                          <div className="flex items-center gap-2 mb-3">
+                            <MapPin className="w-5 h-5 text-white" />
+                            <span className="text-xs font-semibold text-white uppercase tracking-wide">
+                              Hotspot Zone
+                            </span>
+                          </div>
+                          <p className="text-xl font-bold text-white leading-tight mb-2 min-h-[3rem] flex items-center">
+                            {mainLocation}
+                          </p>
+                          <div className="flex items-center gap-2 bg-white bg-opacity-20 rounded-lg px-3 py-2">
+                            <AlertTriangle className="w-4 h-4 text-white" />
+                            <span className="text-xs text-white font-semibold">
+                              Persistent swarm activity
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {magnitudeRange && (
+                      <div className="relative overflow-hidden bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl p-5 shadow-lg transform hover:scale-105 transition-transform">
+                        <div className="absolute top-0 left-0 w-20 h-20 bg-white opacity-10 rounded-full -ml-8 -mt-8"></div>
+                        <div className="absolute bottom-0 right-0 w-28 h-28 bg-white opacity-10 rounded-full -mr-12 -mb-12"></div>
+                        <div className="relative">
+                          <div className="flex items-center gap-2 mb-3">
+                            <Gauge className="w-5 h-5 text-white" />
+                            <span className="text-xs font-semibold text-white uppercase tracking-wide">
+                              Magnitude Range
+                            </span>
+                          </div>
+                          <p className="text-4xl font-extrabold text-white mb-1">
+                            M{magnitudeRange[1]}-{magnitudeRange[2]}
+                          </p>
+                          <p className="text-sm text-white text-opacity-90 font-medium">
+                            Moderate intensity events
+                          </p>
+                          <div className="mt-3 flex items-center gap-2">
+                            <TrendingUp className="w-4 h-4 text-white" />
+                            <span className="text-xs text-white text-opacity-80">
+                              Requires monitoring
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Key Insight Card - Enhanced */}
+                  <div className="relative overflow-hidden bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-xl p-6 shadow-xl">
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -mr-32 -mt-32"></div>
+                    <div className="relative flex items-start gap-4">
+                      <div className="bg-white bg-opacity-20 p-3 rounded-xl flex-shrink-0">
+                        <AlertTriangle className="w-6 h-6 text-white" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-3">
+                          <h4 className="font-bold text-white text-lg">
+                            🎯 Key Observation
+                          </h4>
+                          <Sparkles className="w-4 h-4 text-yellow-300" />
+                        </div>
+                        <p className="text-white text-opacity-95 leading-relaxed font-medium">
+                          {cleanText
+                            .split(/\.\s+/)
+                            .find(
+                              (s) =>
+                                s.includes("clustering") ||
+                                s.includes("warrants") ||
+                                s.includes("monitoring")
+                            )}
+                          .
+                        </p>
+                        <div className="mt-4 pt-4 border-t border-white border-opacity-20">
+                          <div className="flex items-center gap-2 text-white text-opacity-80 text-sm">
+                            <Brain className="w-4 h-4" />
+                            <span>AI-powered seismic pattern analysis</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
+              );
+            })()}
 
-            {/* Analysis Insights Grid */}
+            {/* Active Regions Card */}
+            {(() => {
+              if (!analysis.analysis || isAnalysisExpanded) return null;
+
+              const locationMatches = [
+                ...analysis.analysis.matchAll(
+                  /#### \*\*\d+\. (.*?)\*\*\s*\n\s*\*\s*\*\*Total Events:\*\*\s*(\d+)/g
+                ),
+              ];
+
+              if (locationMatches.length > 0) {
+                return (
+                  <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
+                    <h4 className="font-bold text-gray-900 mb-3 text-sm flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-purple-600" />
+                      Most Active Regions
+                    </h4>
+                    <div className="space-y-2">
+                      {locationMatches.slice(0, 3).map((match, idx) => {
+                        const location = match[1].replace(/\(.*?\)/, "").trim();
+                        const events = match[2];
+
+                        return (
+                          <div
+                            key={idx}
+                            className="flex items-center justify-between bg-white rounded px-3 py-2"
+                          >
+                            <span className="text-gray-700 font-medium text-sm">
+                              {location}
+                            </span>
+                            <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded-full font-bold text-xs">
+                              {events} events
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              }
+              return null;
+            })()}
+
+            {/* Read More Button for Analysis */}
+            {!isAnalysisExpanded && (
+              <div className="text-center">
+                <button
+                  onClick={() => setIsAnalysisExpanded(true)}
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-md hover:shadow-lg font-medium"
+                >
+                  <Activity className="w-4 h-4" />
+                  Read Full Detailed Analysis
+                  <ChevronDown className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
+            {/* Full Analysis - Each Section as Card */}
+            {isAnalysisExpanded && analysis.analysis && (
+              <div className="space-y-3">
+                {/* Render formatted analysis with sections as cards */}
+                {(() => {
+                  const sections = [];
+                  const text = analysis.analysis;
+
+                  // Split by main headers
+                  const parts = text.split(/###\s+\*\*(.+?)\*\*/g);
+
+                  for (let i = 1; i < parts.length; i += 2) {
+                    const title = parts[i];
+                    const content = parts[i + 1]?.trim();
+
+                    if (!content) continue;
+
+                    // Skip Public Awareness section
+                    if (
+                      title ===
+                      "Public Awareness and Safety Tips for Affected Locations"
+                    ) {
+                      continue;
+                    }
+
+                    // Check if this is a location detail section
+                    if (
+                      title ===
+                      "Detailed Analysis Per Location and Area of Concern"
+                    ) {
+                      const locations = content.split(/####\s+\*\*(.+?)\*\*/g);
+
+                      for (let j = 1; j < locations.length; j += 2) {
+                        const locTitle = locations[j];
+                        const locContent = locations[j + 1]?.trim();
+
+                        if (!locContent) continue;
+
+                        // Clean content by removing markdown
+                        const cleanLocContent = locContent.replace(/\*\*/g, "");
+
+                        // Extract structured data from content
+                        const totalEventsMatch = cleanLocContent.match(
+                          /Total Events:\s*(\d+)/
+                        );
+                        const maxMagMatch = cleanLocContent.match(
+                          /Max Magnitude:\s*([\d.]+)/
+                        );
+                        const avgMagMatch = cleanLocContent.match(
+                          /Avg Magnitude:\s*~?([\d.]+)/
+                        );
+                        const activityLevelMatch = cleanLocContent.match(
+                          /Seismic Activity Level:\s*(\w+)/
+                        );
+
+                        // Extract key insights (first meaningful sentence from Patterns/Clusters or Areas of Concern)
+                        const insightMatch = cleanLocContent.match(
+                          /(?:Patterns\/Clusters|Areas of Concern):\s*([^*\n]+)/
+                        );
+
+                        const activityLevel =
+                          activityLevelMatch?.[1] || "Unknown";
+                        const levelColors = {
+                          High: {
+                            bg: "bg-red-50",
+                            border: "border-red-200",
+                            text: "text-red-700",
+                            badge: "bg-red-100",
+                          },
+                          Moderate: {
+                            bg: "bg-yellow-50",
+                            border: "border-yellow-200",
+                            text: "text-yellow-700",
+                            badge: "bg-yellow-100",
+                          },
+                          Low: {
+                            bg: "bg-green-50",
+                            border: "border-green-200",
+                            text: "text-green-700",
+                            badge: "bg-green-100",
+                          },
+                        };
+                        const colors =
+                          levelColors[activityLevel] || levelColors["Low"];
+
+                        sections.push(
+                          <div
+                            key={`loc-${j}`}
+                            className={`${colors.bg} rounded-lg p-4 border ${colors.border}`}
+                          >
+                            <div className="flex items-start justify-between mb-3">
+                              <div className="flex items-start gap-2 flex-1">
+                                <MapPin className="w-4 h-4 text-gray-600 flex-shrink-0 mt-1" />
+                                <h5 className="font-bold text-gray-900 text-sm leading-tight">
+                                  {locTitle}
+                                </h5>
+                              </div>
+                              <span
+                                className={`${colors.badge} ${colors.text} px-2 py-1 rounded-full text-xs font-bold`}
+                              >
+                                {activityLevel}
+                              </span>
+                            </div>
+
+                            {/* Quick Stats Grid */}
+                            <div className="grid grid-cols-3 gap-2 mb-3">
+                              {totalEventsMatch && (
+                                <div className="bg-white rounded p-2">
+                                  <p className="text-xs text-gray-600">
+                                    Events
+                                  </p>
+                                  <p className="text-lg font-bold text-gray-900">
+                                    {totalEventsMatch[1]}
+                                  </p>
+                                </div>
+                              )}
+                              {maxMagMatch && (
+                                <div className="bg-white rounded p-2">
+                                  <p className="text-xs text-gray-600">
+                                    Max Mag
+                                  </p>
+                                  <p className="text-lg font-bold text-gray-900">
+                                    M{maxMagMatch[1]}
+                                  </p>
+                                </div>
+                              )}
+                              {avgMagMatch && (
+                                <div className="bg-white rounded p-2">
+                                  <p className="text-xs text-gray-600">
+                                    Avg Mag
+                                  </p>
+                                  <p className="text-lg font-bold text-gray-900">
+                                    ~{avgMagMatch[1]}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Key Insight */}
+                            {insightMatch && (
+                              <div className="bg-white bg-opacity-50 rounded p-2">
+                                <p className="text-xs text-gray-700 leading-relaxed">
+                                  {insightMatch[1].trim()}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      }
+                    } else {
+                      // Regular section as card
+                      sections.push(
+                        <div
+                          key={i}
+                          className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm"
+                        >
+                          <div className="flex items-start gap-2 mb-2">
+                            <Activity className="w-5 h-5 text-orange-600 flex-shrink-0 mt-0.5" />
+                            <h4 className="font-bold text-gray-900 text-sm">
+                              {title}
+                            </h4>
+                          </div>
+                          <div className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap">
+                            {content}
+                          </div>
+                        </div>
+                      );
+                    }
+                  }
+
+                  return sections.length > 0 ? (
+                    sections
+                  ) : (
+                    <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
+                      <div className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap">
+                        {analysis.analysis}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
+            {/* Collapse Analysis Button */}
+            {isAnalysisExpanded && (
+              <div className="text-center">
+                <button
+                  onClick={() => setIsAnalysisExpanded(false)}
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors font-medium shadow-sm"
+                >
+                  <ChevronUp className="w-4 h-4" />
+                  Hide Detailed Analysis
+                </button>
+              </div>
+            )}
+
+            {/* Statistics Grid - As Individual Cards */}
             {(analysis.totalEvents ||
               analysis.strongestMagnitude ||
               analysis.mostActiveRegion ||
               analysis.avgDepth) && (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {analysis.totalEvents && (
-                  <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                  <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
                     <div className="flex items-center gap-2 mb-2">
                       <Activity className="w-4 h-4 text-blue-600" />
                       <span className="text-xs font-medium text-blue-700">
@@ -200,7 +567,7 @@ const AiAlert = () => {
                 )}
 
                 {analysis.strongestMagnitude && (
-                  <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
+                  <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
                     <div className="flex items-center gap-2 mb-2">
                       <TrendingUp className="w-4 h-4 text-orange-600" />
                       <span className="text-xs font-medium text-orange-700">
@@ -214,7 +581,7 @@ const AiAlert = () => {
                 )}
 
                 {analysis.mostActiveRegion && (
-                  <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
+                  <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
                     <div className="flex items-center gap-2 mb-2">
                       <MapPin className="w-4 h-4 text-purple-600" />
                       <span className="text-xs font-medium text-purple-700">
@@ -228,7 +595,7 @@ const AiAlert = () => {
                 )}
 
                 {analysis.avgDepth && (
-                  <div className="bg-teal-50 rounded-lg p-4 border border-teal-200">
+                  <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
                     <div className="flex items-center gap-2 mb-2">
                       <Layers className="w-4 h-4 text-teal-600" />
                       <span className="text-xs font-medium text-teal-700">
@@ -252,22 +619,21 @@ const AiAlert = () => {
               <RefreshCw className="w-3 h-3 ml-1" />
             </div>
 
-            <button
-              onClick={() => setIsExpanded(!isExpanded)}
-              className="flex items-center gap-2 px-4 py-2 bg-white rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium shadow-sm"
-            >
-              {isExpanded ? (
-                <>
+            {/* Safety Guidelines Button */}
+            <div className="text-center pt-4 border-t-2 border-gray-200">
+              <button
+                onClick={() => setIsSafetyExpanded(!isSafetyExpanded)}
+                className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all shadow-md hover:shadow-lg font-medium"
+              >
+                <Info className="w-4 h-4" />
+                {isSafetyExpanded ? "Hide" : "View"} Safety Guidelines
+                {isSafetyExpanded ? (
                   <ChevronUp className="w-4 h-4" />
-                  Show Less
-                </>
-              ) : (
-                <>
+                ) : (
                   <ChevronDown className="w-4 h-4" />
-                  Read More
-                </>
-              )}
-            </button>
+                )}
+              </button>
+            </div>
           </div>
         ) : (
           <div className="text-center py-8">
@@ -282,8 +648,8 @@ const AiAlert = () => {
         )}
       </div>
 
-      {/* Expanded Content - Safety Guidelines */}
-      {isExpanded && (
+      {/* Safety Guidelines Section */}
+      {isSafetyExpanded && (
         <div className="p-6 pt-0 space-y-6">
           <div className="border-t-2 border-gray-200 pt-6">
             <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">

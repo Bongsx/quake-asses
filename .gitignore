@@ -22,7 +22,6 @@ frontend/.env
 frontend/utils/
 backend/.env
 backend/serviceAccountKey.json
-backend/utils/
 
 # Editor directories and files
 .vscode/*

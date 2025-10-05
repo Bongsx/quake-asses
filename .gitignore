@@ -19,7 +19,6 @@ backend/dist-ssr/
 # Environment / secret files
 *.local
 frontend/.env
-frontend/src/firebase/
 frontend/utils/
 backend/.env
 backend/serviceAccountKey.json

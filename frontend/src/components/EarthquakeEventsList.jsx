@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { getDatabase, ref, onValue } from "firebase/database";
 import React from "react";
+import { useNavigate } from "react-router-dom";
 
 const EarthquakeEventsList = () => {
   const [events, setEvents] = useState([]);
@@ -20,6 +21,7 @@ const EarthquakeEventsList = () => {
   const [locationDetails, setLocationDetails] = useState({});
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedRegion, setSelectedRegion] = useState("all");
+  const navigate = useNavigate();
 
   // Region coordinates (approximate boundaries)
   const regions = {
@@ -219,7 +221,7 @@ const EarthquakeEventsList = () => {
             </p>
           </div>
           <button
-            onClick={() => window.history.back()}
+            onClick={() => navigate(-1)} // goes back one step in history
             className="flex items-center gap-2 px-6 py-3 bg-white border-2 border-blue-600 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition-all duration-200 font-semibold shadow-md hover:shadow-lg"
           >
             <ArrowLeft className="w-5 h-5" />

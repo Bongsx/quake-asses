@@ -8,12 +8,18 @@ import {
   Sparkles,
   Clock,
   RefreshCw,
+  Activity,
+  TrendingUp,
+  MapPin,
+  Layers,
+  BarChart3,
+  Gauge,
 } from "lucide-react";
 import { ref, onValue } from "firebase/database";
 import { db } from "../firebase/firebaseClient";
 import React from "react";
 
-const AiAlertImproved = () => {
+const AiAlert = () => {
   const [analysis, setAnalysis] = useState(null);
   const [isExpanded, setIsExpanded] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -27,6 +33,53 @@ const AiAlertImproved = () => {
     });
     return () => unsubscribe();
   }, []);
+
+  // Get risk level color scheme
+  const getRiskLevel = () => {
+    if (!analysis?.riskLevel)
+      return {
+        color: "gray",
+        label: "Unknown",
+        bg: "bg-gray-100",
+        text: "text-gray-700",
+        border: "border-gray-300",
+      };
+
+    const level = analysis.riskLevel.toLowerCase();
+    if (level === "low")
+      return {
+        color: "green",
+        label: "Low Risk",
+        bg: "bg-green-100",
+        text: "text-green-700",
+        border: "border-green-300",
+      };
+    if (level === "moderate")
+      return {
+        color: "yellow",
+        label: "Moderate Risk",
+        bg: "bg-yellow-100",
+        text: "text-yellow-700",
+        border: "border-yellow-300",
+      };
+    if (level === "high")
+      return {
+        color: "red",
+        label: "High Risk",
+        bg: "bg-red-100",
+        text: "text-red-700",
+        border: "border-red-300",
+      };
+    return {
+      color: "gray",
+      label: level,
+      bg: "bg-gray-100",
+      text: "text-gray-700",
+      border: "border-gray-300",
+    };
+  };
+
+  const riskLevel = getRiskLevel();
 
   if (loading) {
     return (
@@ -60,22 +113,6 @@ const AiAlertImproved = () => {
               </p>
             </div>
           </div>
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="flex items-center gap-2 px-4 py-2 bg-white rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium shadow-sm"
-          >
-            {isExpanded ? (
-              <>
-                <ChevronUp className="w-4 h-4" />
-                Show Less
-              </>
-            ) : (
-              <>
-                <ChevronDown className="w-4 h-4" />
-                Read More
-              </>
-            )}
-          </button>
         </div>
       </div>
 
@@ -104,6 +141,27 @@ const AiAlertImproved = () => {
       <div className="p-6">
         {analysis ? (
           <div className="space-y-4">
+            {/* Risk Level Badge */}
+            <div className="flex items-center gap-3">
+              <div
+                className={`inline-flex items-center gap-2 px-4 py-2 rounded-full ${riskLevel.bg} ${riskLevel.border} border-2`}
+              >
+                <Gauge className={`w-4 h-4 ${riskLevel.text}`} />
+                <span className={`font-bold text-sm ${riskLevel.text}`}>
+                  {riskLevel.label}
+                </span>
+              </div>
+
+              {analysis.confidenceLevel && (
+                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-50 border-2 border-blue-200">
+                  <BarChart3 className="w-4 h-4 text-blue-600" />
+                  <span className="font-bold text-sm text-blue-700">
+                    {Math.round(analysis.confidenceLevel * 100)}% Confidence
+                  </span>
+                </div>
+              )}
+            </div>
+
             {/* Main Analysis */}
             <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg p-5 border border-gray-200">
               <div className="flex items-start gap-3 mb-3">
@@ -121,6 +179,70 @@ const AiAlertImproved = () => {
               </div>
             </div>
 
+            {/* Analysis Insights Grid */}
+            {(analysis.totalEvents ||
+              analysis.strongestMagnitude ||
+              analysis.mostActiveRegion ||
+              analysis.avgDepth) && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {analysis.totalEvents && (
+                  <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Activity className="w-4 h-4 text-blue-600" />
+                      <span className="text-xs font-medium text-blue-700">
+                        Events Analyzed
+                      </span>
+                    </div>
+                    <p className="text-2xl font-bold text-blue-900">
+                      {analysis.totalEvents}
+                    </p>
+                  </div>
+                )}
+
+                {analysis.strongestMagnitude && (
+                  <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
+                    <div className="flex items-center gap-2 mb-2">
+                      <TrendingUp className="w-4 h-4 text-orange-600" />
+                      <span className="text-xs font-medium text-orange-700">
+                        Strongest
+                      </span>
+                    </div>
+                    <p className="text-2xl font-bold text-orange-900">
+                      M{analysis.strongestMagnitude}
+                    </p>
+                  </div>
+                )}
+
+                {analysis.mostActiveRegion && (
+                  <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
+                    <div className="flex items-center gap-2 mb-2">
+                      <MapPin className="w-4 h-4 text-purple-600" />
+                      <span className="text-xs font-medium text-purple-700">
+                        Most Active
+                      </span>
+                    </div>
+                    <p className="text-sm font-bold text-purple-900">
+                      {analysis.mostActiveRegion}
+                    </p>
+                  </div>
+                )}
+
+                {analysis.avgDepth && (
+                  <div className="bg-teal-50 rounded-lg p-4 border border-teal-200">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Layers className="w-4 h-4 text-teal-600" />
+                      <span className="text-xs font-medium text-teal-700">
+                        Avg Depth
+                      </span>
+                    </div>
+                    <p className="text-2xl font-bold text-teal-900">
+                      {analysis.avgDepth}km
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Last Updated */}
             <div className="flex items-center gap-2 text-sm text-gray-500">
               <Clock className="w-4 h-4" />
@@ -129,6 +251,23 @@ const AiAlertImproved = () => {
               </span>
               <RefreshCw className="w-3 h-3 ml-1" />
             </div>
+
+            <button
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="flex items-center gap-2 px-4 py-2 bg-white rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium shadow-sm"
+            >
+              {isExpanded ? (
+                <>
+                  <ChevronUp className="w-4 h-4" />
+                  Show Less
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="w-4 h-4" />
+                  Read More
+                </>
+              )}
+            </button>
           </div>
         ) : (
           <div className="text-center py-8">
@@ -145,7 +284,7 @@ const AiAlertImproved = () => {
 
       {/* Expanded Content - Safety Guidelines */}
       {isExpanded && (
-        <div className="p-6 pt-0 space-y-6 animate-fadeIn">
+        <div className="p-6 pt-0 space-y-6">
           <div className="border-t-2 border-gray-200 pt-6">
             <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
               <Info className="w-5 h-5 text-blue-600" />
@@ -296,4 +435,4 @@ const AiAlertImproved = () => {
   );
 };
 
-export default AiAlertImproved;
+export default AiAlert;

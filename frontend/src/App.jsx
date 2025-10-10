@@ -3,6 +3,7 @@ import React from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import Dashboard from "./components/Dashboard";
 import EarthquakeEventsList from "./components/EarthquakeEventsList";
+import AiAlert from "./components/AiAlert";
 import "./App.css";
 import "./index.css";
 
@@ -12,6 +13,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Dashboard />} />
         <Route path="/earthquake-events" element={<EarthquakeEventsList />} />
+        <Route path="/ai-alert" element={<AiAlert />} />
       </Routes>
     </Router>
   );

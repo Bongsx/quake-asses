@@ -190,7 +190,7 @@ const EarthquakeEventsList = () => {
             </p>
           </div>
           <button
-            onClick={() => navigate(-1)}
+            onClick={() => navigate("/")}
             className="flex items-center gap-2 px-6 py-3 bg-white border-2 border-blue-600 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition-all duration-200 font-semibold shadow-md hover:shadow-lg"
           >
             <ArrowLeft className="w-5 h-5" />

@@ -123,7 +123,7 @@ export default function Dashboard() {
         <div className="bg-white rounded-lg shadow-md p-4 border-l-4 border-green-500">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Last 24 Hours</p>
+              <p className="text-sm text-gray-600">Last 1 Hour</p>
               <p className="text-2xl font-bold text-gray-900">
                 {stats.recent24h}
               </p>

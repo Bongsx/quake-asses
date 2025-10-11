@@ -1,7 +1,13 @@
 import React, { useEffect, useState } from "react";
 import { db, ref, onValue } from "../firebase/firebaseClient";
 import MapView from "./MapView";
-import { Activity, TrendingUp, Clock, MapPin } from "lucide-react";
+import {
+  Activity,
+  TrendingUp,
+  Clock,
+  CalendarDays,
+  MapPin,
+} from "lucide-react";
 import AiAlert from "./AiAlert";
 import { useNavigate } from "react-router-dom";
 
@@ -14,18 +20,34 @@ export default function Dashboard() {
   const [locationDetails, setLocationDetails] = useState({});
   const navigate = useNavigate();
 
+  // ✅ Fetch from both: events/<eventId> and events/<date>/<eventId>
   useEffect(() => {
     const eventsRef = ref(db, "events");
+
     const unsub = onValue(eventsRef, (snapshot) => {
-      const val = snapshot.val() || {};
-      const arr = Object.values(val).sort((a, b) => b.time - a.time);
-      setEvents(arr);
+      const allData = snapshot.val() || {};
+      let combinedEvents = [];
+
+      Object.entries(allData).forEach(([key, value]) => {
+        // Detect if key is a date folder
+        if (/^\d{4}-\d{2}-\d{2}$/.test(key)) {
+          Object.entries(value || {}).forEach(([nestedId, nestedEvent]) => {
+            combinedEvents.push({ id: nestedId, ...nestedEvent });
+          });
+        } else {
+          combinedEvents.push({ id: key, ...value });
+        }
+      });
+
+      combinedEvents.sort((a, b) => (b.time || 0) - (a.time || 0));
+      setEvents(combinedEvents);
       setLoading(false);
     });
+
     return () => unsub();
   }, []);
 
-  // Fetch detailed location using Mapbox
+  // ✅ Fetch precise location via Mapbox
   useEffect(() => {
     const fetchLocationDetails = async () => {
       for (const ev of events) {
@@ -48,32 +70,48 @@ export default function Dashboard() {
           console.error("Error fetching location:", error);
         }
 
-        await new Promise((resolve) => setTimeout(resolve, 500)); // Rate limiting
+        // Throttle requests
+        await new Promise((resolve) => setTimeout(resolve, 500));
       }
     };
 
-    if (events.length > 0) {
-      fetchLocationDetails();
-    }
+    if (events.length > 0) fetchLocationDetails();
   }, [events]);
 
   const getDetailedLocation = (ev) => {
     return locationDetails[ev.id] || "Loading precise location...";
   };
 
+  // ✅ Compute stats: total, average magnitude, last hour, last 24h
   const getStats = () => {
-    if (events.length === 0) return { total: 0, avgMag: 0, recent24h: 0 };
+    if (events.length === 0)
+      return { total: 0, avgMag: 0, lastHour: 0, last24h: 0 };
 
     const total = events.length;
-    const avgMag = (
-      events.reduce((sum, ev) => sum + (ev.magnitude || 0), 0) / total
-    ).toFixed(1);
+    const validMagnitudes = events
+      .map((ev) => parseFloat(ev.magnitude))
+      .filter((m) => !isNaN(m));
+
+    const avgMag =
+      validMagnitudes.length > 0
+        ? (
+            validMagnitudes.reduce((sum, m) => sum + m, 0) /
+            validMagnitudes.length
+          ).toFixed(1)
+        : 0;
 
     const now = Date.now();
+    const oneHourAgo = now - 60 * 60 * 1000;
     const oneDayAgo = now - 24 * 60 * 60 * 1000;
-    const recent24h = events.filter((ev) => ev.time >= oneDayAgo).length;
 
-    return { total, avgMag, recent24h };
+    const lastHour = events.filter(
+      (ev) => ev.time && ev.time >= oneHourAgo
+    ).length;
+    const last24h = events.filter(
+      (ev) => ev.time && ev.time >= oneDayAgo
+    ).length;
+
+    return { total, avgMag, lastHour, last24h };
   };
 
   const stats = getStats();
@@ -89,17 +127,18 @@ export default function Dashboard() {
           </h1>
         </div>
         <p className="text-gray-600">
-          Real-time seismic activity tracking for the Philippines
+          Real-time seismic activity tracking (PHIVOLCS + USGS)
         </p>
       </div>
 
-      {/* AI Alert Component */}
-      <div className="max-w-7xl mx-auto">
+      {/* AI Alert */}
+      <div className="max-w-7xl mx-auto mb-4">
         <AiAlert />
       </div>
 
-      {/* Statistics Cards */}
-      <div className="max-w-7xl mx-auto mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Stats */}
+      <div className="max-w-7xl mx-auto mb-6 grid grid-cols-1 md:grid-cols-4 gap-4">
+        {/* Total Events */}
         <div className="bg-white rounded-lg shadow-md p-4 border-l-4 border-blue-500">
           <div className="flex items-center justify-between">
             <div>
@@ -110,6 +149,7 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {/* Average Magnitude */}
         <div className="bg-white rounded-lg shadow-md p-4 border-l-4 border-orange-500">
           <div className="flex items-center justify-between">
             <div>
@@ -120,15 +160,29 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {/* Last Hour */}
         <div className="bg-white rounded-lg shadow-md p-4 border-l-4 border-green-500">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Last 1 Hour</p>
+              <p className="text-sm text-gray-600">Last Hour</p>
               <p className="text-2xl font-bold text-gray-900">
-                {stats.recent24h}
+                {stats.lastHour}
               </p>
             </div>
             <Clock className="w-10 h-10 text-green-500 opacity-20" />
+          </div>
+        </div>
+
+        {/* Last 24 Hours */}
+        <div className="bg-white rounded-lg shadow-md p-4 border-l-4 border-purple-500">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600">Last 24 Hours</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {stats.last24h}
+              </p>
+            </div>
+            <CalendarDays className="w-10 h-10 text-purple-500 opacity-20" />
           </div>
         </div>
       </div>
@@ -150,14 +204,13 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Recent Events List */}
+      {/* Recent Events */}
       <div className="max-w-7xl mx-auto">
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+        <div className="bg-white rounded-lg shadow-lg p-6 flex justify-between items-center">
+          <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
             <Clock className="w-6 h-6 text-blue-600" />
             Recent Events
           </h3>
-
           <button
             onClick={() => navigate("/earthquake-events")}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm"
@@ -191,7 +244,6 @@ export default function Dashboard() {
                   key={ev.id}
                   className="flex items-start gap-4 p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
                 >
-                  {/* Magnitude Badge */}
                   <div className="flex-shrink-0">
                     <div
                       className={`${magnitudeColor} font-bold text-xl bg-white px-3 py-2 rounded-lg shadow-sm border-2 border-current`}
@@ -200,7 +252,6 @@ export default function Dashboard() {
                     </div>
                   </div>
 
-                  {/* Event Details */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start gap-2 mb-2">
                       <MapPin className="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" />
@@ -216,7 +267,11 @@ export default function Dashboard() {
                             {ev.longitude?.toFixed(4)}°E
                           </span>
                           <span className="mx-2">•</span>
-                          <span>{ev.raw.dateTimeStr}</span>
+                          <span>{ev.raw?.dateTimeStr || "Unknown time"}</span>
+                          <span className="mx-2">•</span>
+                          <span className="uppercase text-xs font-semibold text-gray-500">
+                            {ev.source}
+                          </span>
                         </div>
                       </div>
                     </div>

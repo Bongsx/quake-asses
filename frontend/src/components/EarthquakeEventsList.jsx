@@ -35,7 +35,7 @@ const EarthquakeEventsList = () => {
     mindanao: { name: "Mindanao", lat: [4, 10], lon: [121, 127] },
   };
 
-  // Fetch events from Firebase
+  // ✅ Fetch both structures: events/<eventId> and events/<date>/<eventId>
   useEffect(() => {
     const db = getDatabase();
     const eventsRef = ref(db, "events");
@@ -43,9 +43,26 @@ const EarthquakeEventsList = () => {
     const unsub = onValue(
       eventsRef,
       (snapshot) => {
-        const val = snapshot.val() || {};
-        const arr = Object.values(val).sort((a, b) => b.time - a.time);
-        setEvents(arr);
+        const data = snapshot.val() || {};
+        let combinedEvents = [];
+
+        // 🔹 Support for events/<date>/<eventId> (grouped by date)
+        Object.entries(data).forEach(([key, value]) => {
+          if (typeof value === "object") {
+            const firstValue = Object.values(value)[0];
+            if (firstValue?.id) {
+              // Nested events under a date folder
+              combinedEvents.push(...Object.values(value));
+            } else {
+              // Direct single event (legacy structure)
+              if (value.id) combinedEvents.push(value);
+            }
+          }
+        });
+
+        // Sort latest first
+        combinedEvents.sort((a, b) => b.time - a.time);
+        setEvents(combinedEvents);
         setLoading(false);
       },
       (err) => {
@@ -57,22 +74,20 @@ const EarthquakeEventsList = () => {
     return () => unsub();
   }, []);
 
-  // Load cached locations from localStorage
+  // Load cached locations
   useEffect(() => {
     const saved = localStorage.getItem("locationCache");
-    if (saved) {
-      setLocationDetails(JSON.parse(saved));
-    }
+    if (saved) setLocationDetails(JSON.parse(saved));
   }, []);
 
-  // Save cache when updated
+  // Save location cache
   useEffect(() => {
     if (Object.keys(locationDetails).length > 0) {
       localStorage.setItem("locationCache", JSON.stringify(locationDetails));
     }
   }, [locationDetails]);
 
-  // Fetch location details (optimized batch version)
+  // Fetch precise Mapbox location names
   useEffect(() => {
     if (events.length === 0) return;
 
@@ -105,7 +120,6 @@ const EarthquakeEventsList = () => {
     fetchLocationDetails();
   }, [events]);
 
-  // Helpers
   const getDetailedLocation = (ev) =>
     locationDetails[ev.id] || ev.place || "Unknown Location";
 
@@ -127,7 +141,7 @@ const EarthquakeEventsList = () => {
     const query = searchQuery.toLowerCase();
     const location = getDetailedLocation(event).toLowerCase();
     const place = (event.place || "").toLowerCase();
-    const magnitude = event.magnitude.toString();
+    const magnitude = event.magnitude?.toString() || "";
     return (
       location.includes(query) ||
       place.includes(query) ||
@@ -139,7 +153,6 @@ const EarthquakeEventsList = () => {
     (ev) => filterByRegion(ev) && filterBySearch(ev)
   );
 
-  // Limit to first 50 to avoid rendering lag (optional)
   const displayedEvents = filteredEvents.slice(0, 50);
 
   const getStats = () => {

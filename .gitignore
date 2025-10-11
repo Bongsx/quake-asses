@@ -19,6 +19,7 @@ backend/dist-ssr/
 # Environment / secret files
 *.local
 frontend/.env
+backend/.env
 frontend/utils/
 backend/serviceAccountKey.json
 

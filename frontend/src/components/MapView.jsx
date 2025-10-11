@@ -112,10 +112,14 @@ export default function MapView({
   }, [validEvents]);
 
   // Update map style
+  // Update map style safely
   useEffect(() => {
     if (mapRef.current && window.mapboxgl) {
-      mapRef.current.setStyle(`mapbox://styles/mapbox/${mapStyle}`);
-      mapRef.current.once("styledata", () => {
+      const map = mapRef.current;
+      map.setStyle(`mapbox://styles/mapbox/${mapStyle}`);
+
+      // Wait until style is fully loaded before updating markers
+      map.once("load", () => {
         updateMarkers();
       });
     }
@@ -126,15 +130,217 @@ export default function MapView({
 
     const map = mapRef.current;
 
+    // Wait if style isn't fully ready yet
+    if (!map.isStyleLoaded()) {
+      map.once("styledata", updateMarkers);
+      return;
+    }
+
     // Remove existing markers
     markersRef.current.forEach((marker) => marker.remove());
     markersRef.current = [];
 
-    // Add heatmap layer if it doesn't exist
+    // If source doesn't exist yet, create it safely
     if (!map.getSource("earthquakes")) {
-      map.addSource("earthquakes", {
-        type: "geojson",
-        data: {
+      try {
+        map.addSource("earthquakes", {
+          type: "geojson",
+          data: {
+            type: "FeatureCollection",
+            features: validEvents.map((ev) => ({
+              type: "Feature",
+              properties: {
+                magnitude: ev.magnitude,
+                depth: ev.depth,
+                place: ev.place || ev.raw?.place,
+                time: ev.time,
+                source: ev.source,
+              },
+              geometry: {
+                type: "Point",
+                coordinates: [ev.longitude, ev.latitude],
+              },
+            })),
+          },
+        });
+
+        // Add heatmap layer
+        if (!map.getLayer("earthquakes-heat")) {
+          map.addLayer(
+            {
+              id: "earthquakes-heat",
+              type: "heatmap",
+              source: "earthquakes",
+              maxzoom: 10,
+              paint: {
+                "heatmap-weight": [
+                  "interpolate",
+                  ["linear"],
+                  ["get", "magnitude"],
+                  0,
+                  0,
+                  8,
+                  1,
+                ],
+                "heatmap-intensity": [
+                  "interpolate",
+                  ["linear"],
+                  ["zoom"],
+                  0,
+                  1,
+                  9,
+                  3,
+                ],
+                "heatmap-color": [
+                  "interpolate",
+                  ["linear"],
+                  ["heatmap-density"],
+                  0,
+                  "rgba(33,102,172,0)",
+                  0.2,
+                  "rgb(103,169,207)",
+                  0.4,
+                  "rgb(209,229,240)",
+                  0.6,
+                  "rgb(253,219,199)",
+                  0.8,
+                  "rgb(239,138,98)",
+                  1,
+                  "rgb(178,24,43)",
+                ],
+                "heatmap-radius": [
+                  "interpolate",
+                  ["linear"],
+                  ["zoom"],
+                  0,
+                  2,
+                  9,
+                  20,
+                ],
+                "heatmap-opacity": [
+                  "interpolate",
+                  ["linear"],
+                  ["zoom"],
+                  7,
+                  1,
+                  10,
+                  0,
+                ],
+              },
+            },
+            "waterway-label"
+          );
+        }
+
+        // Circle layer for zoomed-in view
+        if (!map.getLayer("earthquakes-point")) {
+          map.addLayer(
+            {
+              id: "earthquakes-point",
+              type: "circle",
+              source: "earthquakes",
+              minzoom: 8,
+              paint: {
+                "circle-radius": [
+                  "interpolate",
+                  ["linear"],
+                  ["get", "magnitude"],
+                  3,
+                  4,
+                  4,
+                  6,
+                  5,
+                  8,
+                  6,
+                  10,
+                  7,
+                  14,
+                  8,
+                  18,
+                ],
+                "circle-color": [
+                  "interpolate",
+                  ["linear"],
+                  ["get", "magnitude"],
+                  3,
+                  "#22c55e",
+                  4,
+                  "#eab308",
+                  5,
+                  "#ca8a04",
+                  6,
+                  "#ea580c",
+                  7,
+                  "#dc2626",
+                ],
+                "circle-stroke-color": "#ffffff",
+                "circle-stroke-width": 2,
+                "circle-opacity": [
+                  "interpolate",
+                  ["linear"],
+                  ["zoom"],
+                  8,
+                  0,
+                  10,
+                  1,
+                ],
+              },
+            },
+            "waterway-label"
+          );
+        }
+
+        // Click & hover handlers
+        map.on("click", "earthquakes-point", (e) => {
+          if (e.features.length > 0) {
+            const feature = e.features[0];
+            const props = feature.properties;
+            setSelectedEvent({
+              latitude: feature.geometry.coordinates[1],
+              longitude: feature.geometry.coordinates[0],
+              magnitude: props.magnitude,
+              depth: props.depth,
+              place: props.place,
+              time: props.time,
+              source: props.source,
+            });
+          }
+        });
+
+        map.on("mouseenter", "earthquakes-point", () => {
+          map.getCanvas().style.cursor = "pointer";
+        });
+
+        map.on("mouseleave", "earthquakes-point", () => {
+          map.getCanvas().style.cursor = "";
+        });
+
+        map.on("mousemove", "earthquakes-point", (e) => {
+          if (e.features.length > 0) {
+            const feature = e.features[0];
+            const props = feature.properties;
+            setHoveredEvent({
+              latitude: feature.geometry.coordinates[1],
+              longitude: feature.geometry.coordinates[0],
+              magnitude: props.magnitude,
+              depth: props.depth,
+              place: props.place,
+              time: props.time,
+            });
+          }
+        });
+
+        map.on("mouseleave", "earthquakes-point", () => {
+          setHoveredEvent(null);
+        });
+      } catch (err) {
+        console.warn("Skipping map layer setup:", err.message);
+      }
+    } else {
+      // Update existing source
+      const src = map.getSource("earthquakes");
+      if (src) {
+        src.setData({
           type: "FeatureCollection",
           features: validEvents.map((ev) => ({
             type: "Feature",
@@ -150,195 +356,8 @@ export default function MapView({
               coordinates: [ev.longitude, ev.latitude],
             },
           })),
-        },
-      });
-
-      // Heatmap layer
-      map.addLayer(
-        {
-          id: "earthquakes-heat",
-          type: "heatmap",
-          source: "earthquakes",
-          maxzoom: 10,
-          paint: {
-            "heatmap-weight": [
-              "interpolate",
-              ["linear"],
-              ["get", "magnitude"],
-              0,
-              0,
-              8,
-              1,
-            ],
-            "heatmap-intensity": [
-              "interpolate",
-              ["linear"],
-              ["zoom"],
-              0,
-              1,
-              9,
-              3,
-            ],
-            "heatmap-color": [
-              "interpolate",
-              ["linear"],
-              ["heatmap-density"],
-              0,
-              "rgba(33,102,172,0)",
-              0.2,
-              "rgb(103,169,207)",
-              0.4,
-              "rgb(209,229,240)",
-              0.6,
-              "rgb(253,219,199)",
-              0.8,
-              "rgb(239,138,98)",
-              1,
-              "rgb(178,24,43)",
-            ],
-            "heatmap-radius": [
-              "interpolate",
-              ["linear"],
-              ["zoom"],
-              0,
-              2,
-              9,
-              20,
-            ],
-            "heatmap-opacity": [
-              "interpolate",
-              ["linear"],
-              ["zoom"],
-              7,
-              1,
-              10,
-              0,
-            ],
-          },
-        },
-        "waterway-label"
-      );
-
-      // Circle layer for zoomed in view
-      map.addLayer(
-        {
-          id: "earthquakes-point",
-          type: "circle",
-          source: "earthquakes",
-          minzoom: 8,
-          paint: {
-            "circle-radius": [
-              "interpolate",
-              ["linear"],
-              ["get", "magnitude"],
-              3,
-              4,
-              4,
-              6,
-              5,
-              8,
-              6,
-              10,
-              7,
-              14,
-              8,
-              18,
-            ],
-            "circle-color": [
-              "interpolate",
-              ["linear"],
-              ["get", "magnitude"],
-              3,
-              "#22c55e",
-              4,
-              "#eab308",
-              5,
-              "#ca8a04",
-              6,
-              "#ea580c",
-              7,
-              "#dc2626",
-            ],
-            "circle-stroke-color": "#ffffff",
-            "circle-stroke-width": 2,
-            "circle-opacity": [
-              "interpolate",
-              ["linear"],
-              ["zoom"],
-              8,
-              0,
-              10,
-              1,
-            ],
-          },
-        },
-        "waterway-label"
-      );
-
-      // Add click handler for points
-      map.on("click", "earthquakes-point", (e) => {
-        if (e.features.length > 0) {
-          const feature = e.features[0];
-          const props = feature.properties;
-          setSelectedEvent({
-            latitude: feature.geometry.coordinates[1],
-            longitude: feature.geometry.coordinates[0],
-            magnitude: props.magnitude,
-            depth: props.depth,
-            place: props.place,
-            time: props.time,
-            source: props.source,
-          });
-        }
-      });
-
-      // Change cursor on hover
-      map.on("mouseenter", "earthquakes-point", () => {
-        map.getCanvas().style.cursor = "pointer";
-      });
-
-      map.on("mouseleave", "earthquakes-point", () => {
-        map.getCanvas().style.cursor = "";
-      });
-
-      // Add hover tooltip
-      map.on("mousemove", "earthquakes-point", (e) => {
-        if (e.features.length > 0) {
-          const feature = e.features[0];
-          const props = feature.properties;
-          setHoveredEvent({
-            latitude: feature.geometry.coordinates[1],
-            longitude: feature.geometry.coordinates[0],
-            magnitude: props.magnitude,
-            depth: props.depth,
-            place: props.place,
-            time: props.time,
-          });
-        }
-      });
-
-      map.on("mouseleave", "earthquakes-point", () => {
-        setHoveredEvent(null);
-      });
-    } else {
-      // Update existing source
-      map.getSource("earthquakes").setData({
-        type: "FeatureCollection",
-        features: validEvents.map((ev) => ({
-          type: "Feature",
-          properties: {
-            magnitude: ev.magnitude,
-            depth: ev.depth,
-            place: ev.place || ev.raw?.place,
-            time: ev.time,
-            source: ev.source,
-          },
-          geometry: {
-            type: "Point",
-            coordinates: [ev.longitude, ev.latitude],
-          },
-        })),
-      });
+        });
+      }
     }
   };
 

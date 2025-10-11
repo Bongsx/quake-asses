@@ -27,7 +27,7 @@ const EarthquakeEventsList = () => {
   const [selectedRegion, setSelectedRegion] = useState("all");
   const navigate = useNavigate();
 
-  // Region coordinates (approximate boundaries)
+  // Region coordinates
   const regions = {
     all: { name: "All Regions", lat: [4, 21], lon: [116, 127] },
     luzon: { name: "Luzon", lat: [14, 21], lon: [119.5, 122.5] },
@@ -39,20 +39,47 @@ const EarthquakeEventsList = () => {
   useEffect(() => {
     const db = getDatabase();
     const eventsRef = ref(db, "events");
-    const unsub = onValue(eventsRef, (snapshot) => {
-      const val = snapshot.val() || {};
-      const arr = Object.values(val).sort((a, b) => b.time - a.time);
-      setEvents(arr);
-      setLoading(false);
-    });
+
+    const unsub = onValue(
+      eventsRef,
+      (snapshot) => {
+        const val = snapshot.val() || {};
+        const arr = Object.values(val).sort((a, b) => b.time - a.time);
+        setEvents(arr);
+        setLoading(false);
+      },
+      (err) => {
+        setError(err.message);
+        setLoading(false);
+      }
+    );
+
     return () => unsub();
   }, []);
 
-  // Fetch detailed location information using Mapbox
+  // Load cached locations from localStorage
   useEffect(() => {
+    const saved = localStorage.getItem("locationCache");
+    if (saved) {
+      setLocationDetails(JSON.parse(saved));
+    }
+  }, []);
+
+  // Save cache when updated
+  useEffect(() => {
+    if (Object.keys(locationDetails).length > 0) {
+      localStorage.setItem("locationCache", JSON.stringify(locationDetails));
+    }
+  }, [locationDetails]);
+
+  // Fetch location details (optimized batch version)
+  useEffect(() => {
+    if (events.length === 0) return;
+
     const fetchLocationDetails = async () => {
-      for (const ev of events) {
-        if (locationDetails[ev.id] || !ev.latitude || !ev.longitude) continue;
+      const newDetails = {};
+      const fetchPromises = events.map(async (ev) => {
+        if (locationDetails[ev.id] || !ev.latitude || !ev.longitude) return;
 
         try {
           const response = await fetch(
@@ -62,30 +89,26 @@ const EarthquakeEventsList = () => {
           if (response.ok) {
             const data = await response.json();
             const placeName = data.features[0]?.place_name || ev.place;
-            setLocationDetails((prev) => ({
-              ...prev,
-              [ev.id]: placeName,
-            }));
+            newDetails[ev.id] = placeName;
           }
         } catch (err) {
           console.error("Error fetching location:", err);
         }
+      });
 
-        // Small delay to prevent hitting Mapbox rate limits
-        await new Promise((resolve) => setTimeout(resolve, 500));
+      await Promise.allSettled(fetchPromises);
+      if (Object.keys(newDetails).length > 0) {
+        setLocationDetails((prev) => ({ ...prev, ...newDetails }));
       }
     };
 
-    if (events.length > 0) {
-      fetchLocationDetails();
-    }
-  }, [events, locationDetails]);
+    fetchLocationDetails();
+  }, [events]);
 
-  const getDetailedLocation = (ev) => {
-    return locationDetails[ev.id] || ev.place || "Unknown Location";
-  };
+  // Helpers
+  const getDetailedLocation = (ev) =>
+    locationDetails[ev.id] || ev.place || "Unknown Location";
 
-  // Filter events by region
   const filterByRegion = (event) => {
     if (selectedRegion === "all") return true;
     const region = regions[selectedRegion];
@@ -99,7 +122,6 @@ const EarthquakeEventsList = () => {
     );
   };
 
-  // Filter events by search query
   const filterBySearch = (event) => {
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
@@ -113,12 +135,13 @@ const EarthquakeEventsList = () => {
     );
   };
 
-  // Apply all filters
   const filteredEvents = events.filter(
     (ev) => filterByRegion(ev) && filterBySearch(ev)
   );
 
-  // Calculate statistics
+  // Limit to first 50 to avoid rendering lag (optional)
+  const displayedEvents = filteredEvents.slice(0, 50);
+
   const getStats = () => {
     if (filteredEvents.length === 0)
       return { total: 0, avgMag: 0, recent24h: 0 };
@@ -148,6 +171,7 @@ const EarthquakeEventsList = () => {
     return "Minor";
   };
 
+  // Loading & Error States
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 to-gray-100">
@@ -175,6 +199,7 @@ const EarthquakeEventsList = () => {
     );
   }
 
+  // Main UI
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-gray-50 to-blue-100 py-6 px-4">
       <div className="max-w-7xl mx-auto">
@@ -198,7 +223,7 @@ const EarthquakeEventsList = () => {
           </button>
         </div>
 
-        {/* Statistics Cards */}
+        {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg p-6 text-white">
             <div className="flex items-center justify-between">
@@ -237,7 +262,7 @@ const EarthquakeEventsList = () => {
           </div>
         </div>
 
-        {/* Search and Filter */}
+        {/* Search & Filter */}
         <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
           <div className="flex flex-col md:flex-row gap-4">
             <div className="flex-1 relative">
@@ -289,8 +314,8 @@ const EarthquakeEventsList = () => {
           )}
         </div>
 
-        {/* Events List */}
-        {filteredEvents.length === 0 ? (
+        {/* Event List */}
+        {displayedEvents.length === 0 ? (
           <div className="bg-white rounded-xl shadow-lg p-12 text-center">
             <Activity className="w-20 h-20 text-gray-300 mx-auto mb-4" />
             <p className="text-gray-600 text-xl font-medium mb-2">
@@ -302,7 +327,7 @@ const EarthquakeEventsList = () => {
           </div>
         ) : (
           <div className="space-y-4">
-            {filteredEvents.map((event) => {
+            {displayedEvents.map((event) => {
               const isLoadingLocation = !locationDetails[event.id];
 
               return (

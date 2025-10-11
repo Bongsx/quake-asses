@@ -1,4 +1,4 @@
-// server.js - WITH GEMINI AI ANALYSIS INTEGRATED
+// server.js - WITH GEMINI AI ANALYSIS + DAILY GROUPING INTEGRATED
 const express = require("express");
 const axios = require("axios");
 const cors = require("cors");
@@ -28,12 +28,10 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// MOST EFFICIENT: Use GeoJSON feed for Philippines region
 const USGS_FEED =
   process.env.USGS_FEED ||
   "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson";
 
-// For more historical data or specific filtering
 const USGS_API_PHILIPPINES =
   "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson" +
   "&starttime=" +
@@ -46,6 +44,25 @@ const locationCache = new Map();
 
 function usgsFeatureToEvent(feature) {
   const coords = feature.geometry.coordinates;
+  const timestamp = feature.properties.time;
+  const dateObj = new Date(timestamp);
+
+  // Format to: "11 October 2025 - 05:57 PM"
+  const dateTimeStr = dateObj
+    .toLocaleString("en-PH", {
+      timeZone: "Asia/Manila",
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    })
+    .replace(",", " -");
+
+  // Location formatting similar to PHIVOLCS
+  const location = feature.properties.place || "Unknown Location";
+
   return {
     id: feature.id,
     source: "usgs",
@@ -53,11 +70,21 @@ function usgsFeatureToEvent(feature) {
     latitude: parseFloat(coords[1]) || 0,
     longitude: parseFloat(coords[0]) || 0,
     depth: parseFloat(coords[2]) || 0,
-    time: feature.properties.time,
-    place: feature.properties.place || "Unknown Location",
+    time: timestamp,
+    place: location,
     type: feature.properties.type || "earthquake",
     url: feature.properties.url,
-    raw: feature.properties,
+    raw: {
+      dateTimeStr,
+      location,
+      mag: feature.properties.mag,
+      depth: feature.properties.depth,
+      time: timestamp,
+      place: feature.properties.place,
+      title: feature.properties.title,
+      status: feature.properties.status,
+      type: feature.properties.type,
+    },
   };
 }
 
@@ -99,10 +126,7 @@ async function fetchAndPush(useAPI = false, includePHIVOLCS = true) {
         console.log(`🇵🇭 ${phivolcsEvents.length} PHIVOLCS events`);
         allEvents = [...allEvents, ...phivolcsEvents];
       } catch (phivolcsErr) {
-        console.error(
-          "⚠️  PHIVOLCS scraping failed, continuing with USGS only:",
-          phivolcsErr.message
-        );
+        console.error("⚠️  PHIVOLCS scraping failed:", phivolcsErr.message);
       }
     }
 
@@ -110,9 +134,11 @@ async function fetchAndPush(useAPI = false, includePHIVOLCS = true) {
     let skippedCount = 0;
 
     for (const e of allEvents) {
-      // Sanitize ID for Firebase (remove invalid characters)
+      const eventDate = new Date(e.time).toISOString().split("T")[0];
       const sanitizedId = e.id.replace(/[.#$[\]]/g, "_");
-      const eventRef = db.ref("events/" + sanitizedId);
+
+      // Path example: events/2025-10-11/<eventId>
+      const eventRef = db.ref(`events/${eventDate}/${sanitizedId}`);
       const snap = await eventRef.once("value");
 
       if (snap.exists()) {
@@ -148,7 +174,6 @@ async function fetchAndPush(useAPI = false, includePHIVOLCS = true) {
         }
       }
 
-      // Save to Firebase
       await eventRef.set({
         id: sanitizedId,
         source: e.source,
@@ -165,8 +190,6 @@ async function fetchAndPush(useAPI = false, includePHIVOLCS = true) {
       });
 
       newCount++;
-
-      // Only log first 10 to avoid spam
       if (newCount <= 10) {
         console.log(
           `✅ Saved: ${sanitizedId.substring(
@@ -186,46 +209,40 @@ async function fetchAndPush(useAPI = false, includePHIVOLCS = true) {
     );
   } catch (err) {
     console.error("❌ fetchAndPush error:", err.message);
-    if (err.response) {
-      console.error("Response status:", err.response.status);
-    }
   }
 }
 
-// Schedule: every 5 minutes for hourly feed
+// Cron jobs
 const cronExpr = process.env.POLL_CRON || "*/5 * * * *";
 cron.schedule(cronExpr, () => {
   console.log("⏰ Cron triggered:", new Date().toISOString());
   fetchAndPush(false, true);
 });
 
-// Hourly API sync
 cron.schedule("0 * * * *", () => {
   console.log("⏰ Hourly API sync:", new Date().toISOString());
   fetchAndPush(true, true);
 });
 
-// Run Gemini AI analysis every hour
 cron.schedule("0 * * * *", () => {
   console.log("🤖 Running Gemini AI analysis...");
-  analyzeWithGemini().catch((err) => {
-    console.error("❌ Gemini analysis error:", err.message);
-  });
+  analyzeWithGemini?.().catch((err) =>
+    console.error("❌ Gemini analysis error:", err.message)
+  );
 });
 
-// Run immediately at startup
+// Startup
 console.log("🚀 Starting initial fetch...");
 fetchAndPush(false, true);
 
-// Run initial AI analysis after 30 seconds (give time for events to load)
 setTimeout(() => {
   console.log("🤖 Running initial Gemini AI analysis...");
-  analyzeWithGemini().catch((err) => {
-    console.error("❌ Initial Gemini analysis error:", err.message);
-  });
+  analyzeWithGemini?.().catch((err) =>
+    console.error("❌ Initial Gemini analysis error:", err.message)
+  );
 }, 30000);
 
-// Health check endpoint
+// Health check
 app.get("/health", (req, res) => {
   res.json({
     status: "ok",
@@ -235,12 +252,18 @@ app.get("/health", (req, res) => {
   });
 });
 
-// Get all events
+// Get all events (combine all date folders)
 app.get("/api/events", async (req, res) => {
   try {
     const snapshot = await db.ref("events").once("value");
-    const events = snapshot.val() || {};
-    const eventArray = Object.values(events).sort((a, b) => b.time - a.time);
+    const allData = snapshot.val() || {};
+
+    let eventArray = [];
+    for (const [date, events] of Object.entries(allData)) {
+      eventArray.push(...Object.values(events));
+    }
+
+    eventArray.sort((a, b) => b.time - a.time);
     res.json({ count: eventArray.length, events: eventArray });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -252,89 +275,87 @@ app.get("/api/events/:source", async (req, res) => {
   try {
     const { source } = req.params;
     const snapshot = await db.ref("events").once("value");
-    const events = snapshot.val() || {};
-    const eventArray = Object.values(events)
+    const allData = snapshot.val() || {};
+
+    let eventArray = [];
+    for (const [date, events] of Object.entries(allData)) {
+      eventArray.push(...Object.values(events));
+    }
+
+    eventArray = eventArray
       .filter((e) => e.source === source.toLowerCase())
       .sort((a, b) => b.time - a.time);
-    res.json({ count: eventArray.length, events: eventArray, source });
+
+    res.json({ count: eventArray.length, source, events: eventArray });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Get AI analysis
+// AI analysis
 app.get("/api/ai-analysis", async (req, res) => {
   try {
     const snapshot = await db.ref("aiAnalysis/last").once("value");
     const analysis = snapshot.val();
-
-    if (!analysis) {
-      return res.json({
-        message: "No analysis available yet",
-        timestamp: null,
-      });
-    }
-
+    if (!analysis)
+      return res.json({ message: "No analysis yet", timestamp: null });
     res.json(analysis);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Manual trigger for AI analysis
 app.post("/api/trigger-analysis", async (req, res) => {
   try {
     console.log("🔧 Manual AI analysis triggered");
-    analyzeWithGemini();
-    res.json({
-      message: "AI analysis triggered successfully",
-      timestamp: Date.now(),
-    });
+    analyzeWithGemini?.();
+    res.json({ message: "AI analysis triggered", timestamp: Date.now() });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Manual trigger endpoint
+// Manual fetch trigger
 app.post("/api/trigger-fetch", async (req, res) => {
-  console.log("🔧 Manual fetch triggered");
   const useAPI = req.query.useAPI === "true";
   const includePHIVOLCS = req.query.phivolcs !== "false";
+  console.log("🔧 Manual fetch triggered");
   fetchAndPush(useAPI, includePHIVOLCS);
-  res.json({
-    message: "Fetch triggered",
-    useAPI,
-    includePHIVOLCS,
-  });
+  res.json({ message: "Fetch triggered", useAPI, includePHIVOLCS });
 });
 
-// Clear old events (older than 30 days)
+// Cleanup old folders
 app.post("/api/cleanup", async (req, res) => {
   try {
     const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
     const snapshot = await db.ref("events").once("value");
-    const events = snapshot.val() || {};
+    const allData = snapshot.val() || {};
 
     let deletedCount = 0;
-    for (const [id, event] of Object.entries(events)) {
-      if (event.time < thirtyDaysAgo) {
-        await db.ref("events/" + id).remove();
+    for (const [date, events] of Object.entries(allData)) {
+      const folderTime = new Date(date).getTime();
+      if (folderTime < thirtyDaysAgo) {
+        await db.ref(`events/${date}`).remove();
         deletedCount++;
       }
     }
 
-    res.json({ message: "Cleanup completed", deleted: deletedCount });
+    res.json({ message: "Cleanup completed", deletedFolders: deletedCount });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Get statistics
+// Stats endpoint
 app.get("/api/stats", async (req, res) => {
   try {
     const snapshot = await db.ref("events").once("value");
-    const events = snapshot.val() || {};
-    const eventArray = Object.values(events);
+    const allData = snapshot.val() || {};
+
+    let eventArray = [];
+    for (const [date, events] of Object.entries(allData)) {
+      eventArray.push(...Object.values(events));
+    }
 
     const now = Date.now();
     const oneHourAgo = now - 60 * 60 * 1000;
@@ -374,17 +395,6 @@ app.listen(PORT, () => {
   console.log(`🚀 Backend listening on port ${PORT}`);
   console.log(`📍 Monitoring Philippines region (4.5°N-21°N, 116°E-127°E)`);
   console.log(`⏰ Polling every ${cronExpr} (USGS + PHIVOLCS)`);
-  console.log(`⏰ Hourly API sync at :00 minutes`);
   console.log(`🤖 Gemini AI analysis every hour`);
-  console.log(`💾 Location cache enabled`);
-  console.log(`🇵🇭 PHIVOLCS scraping enabled`);
-  console.log(`\n📡 Available endpoints:`);
-  console.log(`   GET  /health`);
-  console.log(`   GET  /api/events`);
-  console.log(`   GET  /api/events/:source`);
-  console.log(`   GET  /api/stats`);
-  console.log(`   GET  /api/ai-analysis`);
-  console.log(`   POST /api/trigger-fetch`);
-  console.log(`   POST /api/trigger-analysis`);
-  console.log(`   POST /api/cleanup\n`);
+  console.log(`💾 Grouped by date (daily folders in Firebase)\n`);
 });

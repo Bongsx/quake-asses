@@ -128,236 +128,62 @@ export default function MapView({
   const updateMarkers = () => {
     if (!mapRef.current || !window.mapboxgl) return;
 
-    const map = mapRef.current;
-
-    // Wait if style isn't fully ready yet
-    if (!map.isStyleLoaded()) {
-      map.once("styledata", updateMarkers);
-      return;
-    }
-
     // Remove existing markers
     markersRef.current.forEach((marker) => marker.remove());
     markersRef.current = [];
 
-    // If source doesn't exist yet, create it safely
-    if (!map.getSource("earthquakes")) {
-      try {
-        map.addSource("earthquakes", {
-          type: "geojson",
-          data: {
-            type: "FeatureCollection",
-            features: validEvents.map((ev) => ({
-              type: "Feature",
-              properties: {
-                magnitude: ev.magnitude,
-                depth: ev.depth,
-                place: ev.place || ev.raw?.place,
-                time: ev.time,
-                source: ev.source,
-              },
-              geometry: {
-                type: "Point",
-                coordinates: [ev.longitude, ev.latitude],
-              },
-            })),
-          },
-        });
+    // Add new markers
+    validEvents.forEach((ev) => {
+      const el = document.createElement("div");
+      el.className = "custom-marker";
+      el.style.width = `${getMagnitudeSize(ev.magnitude)}px`;
+      el.style.height = `${getMagnitudeSize(ev.magnitude)}px`;
+      el.style.backgroundColor = getMagnitudeColor(ev.magnitude);
+      el.style.borderRadius = "50%";
+      el.style.border = "2px solid white";
+      el.style.cursor = "pointer";
+      el.style.boxShadow = "0 2px 8px rgba(0,0,0,0.3)";
+      el.style.transition = "transform 0.2s";
 
-        // Add heatmap layer
-        if (!map.getLayer("earthquakes-heat")) {
-          map.addLayer(
-            {
-              id: "earthquakes-heat",
-              type: "heatmap",
-              source: "earthquakes",
-              maxzoom: 10,
-              paint: {
-                "heatmap-weight": [
-                  "interpolate",
-                  ["linear"],
-                  ["get", "magnitude"],
-                  0,
-                  0,
-                  8,
-                  1,
-                ],
-                "heatmap-intensity": [
-                  "interpolate",
-                  ["linear"],
-                  ["zoom"],
-                  0,
-                  1,
-                  9,
-                  3,
-                ],
-                "heatmap-color": [
-                  "interpolate",
-                  ["linear"],
-                  ["heatmap-density"],
-                  0,
-                  "rgba(33,102,172,0)",
-                  0.2,
-                  "rgb(103,169,207)",
-                  0.4,
-                  "rgb(209,229,240)",
-                  0.6,
-                  "rgb(253,219,199)",
-                  0.8,
-                  "rgb(239,138,98)",
-                  1,
-                  "rgb(178,24,43)",
-                ],
-                "heatmap-radius": [
-                  "interpolate",
-                  ["linear"],
-                  ["zoom"],
-                  0,
-                  2,
-                  9,
-                  20,
-                ],
-                "heatmap-opacity": [
-                  "interpolate",
-                  ["linear"],
-                  ["zoom"],
-                  7,
-                  1,
-                  10,
-                  0,
-                ],
-              },
-            },
-            "waterway-label"
-          );
-        }
-
-        // Circle layer for zoomed-in view
-        if (!map.getLayer("earthquakes-point")) {
-          map.addLayer(
-            {
-              id: "earthquakes-point",
-              type: "circle",
-              source: "earthquakes",
-              minzoom: 8,
-              paint: {
-                "circle-radius": [
-                  "interpolate",
-                  ["linear"],
-                  ["get", "magnitude"],
-                  3,
-                  4,
-                  4,
-                  6,
-                  5,
-                  8,
-                  6,
-                  10,
-                  7,
-                  14,
-                  8,
-                  18,
-                ],
-                "circle-color": [
-                  "interpolate",
-                  ["linear"],
-                  ["get", "magnitude"],
-                  3,
-                  "#22c55e",
-                  4,
-                  "#eab308",
-                  5,
-                  "#ca8a04",
-                  6,
-                  "#ea580c",
-                  7,
-                  "#dc2626",
-                ],
-                "circle-stroke-color": "#ffffff",
-                "circle-stroke-width": 2,
-                "circle-opacity": [
-                  "interpolate",
-                  ["linear"],
-                  ["zoom"],
-                  8,
-                  0,
-                  10,
-                  1,
-                ],
-              },
-            },
-            "waterway-label"
-          );
-        }
-
-        // Click & hover handlers
-        map.on("click", "earthquakes-point", (e) => {
-          if (e.features.length > 0) {
-            const feature = e.features[0];
-            const props = feature.properties;
-            setSelectedEvent({
-              latitude: feature.geometry.coordinates[1],
-              longitude: feature.geometry.coordinates[0],
-              magnitude: props.magnitude,
-              depth: props.depth,
-              place: props.place,
-              time: props.time,
-              source: props.source,
-            });
-          }
-        });
-
-        map.on("mouseenter", "earthquakes-point", () => {
-          map.getCanvas().style.cursor = "pointer";
-        });
-
-        map.on("mouseleave", "earthquakes-point", () => {
-          map.getCanvas().style.cursor = "";
-        });
-
-        map.on("mousemove", "earthquakes-point", (e) => {
-          if (e.features.length > 0) {
-            const feature = e.features[0];
-            const props = feature.properties;
-            setHoveredEvent({
-              latitude: feature.geometry.coordinates[1],
-              longitude: feature.geometry.coordinates[0],
-              magnitude: props.magnitude,
-              depth: props.depth,
-              place: props.place,
-              time: props.time,
-            });
-          }
-        });
-
-        map.on("mouseleave", "earthquakes-point", () => {
-          setHoveredEvent(null);
-        });
-      } catch (err) {
-        console.warn("Skipping map layer setup:", err.message);
+      // Pulse animation for large events
+      if (ev.magnitude >= 5) {
+        el.style.animation = "pulse 2s infinite";
       }
-    } else {
-      // Update existing source
-      const src = map.getSource("earthquakes");
-      if (src) {
-        src.setData({
-          type: "FeatureCollection",
-          features: validEvents.map((ev) => ({
-            type: "Feature",
-            properties: {
-              magnitude: ev.magnitude,
-              depth: ev.depth,
-              place: ev.place || ev.raw?.place,
-              time: ev.time,
-              source: ev.source,
-            },
-            geometry: {
-              type: "Point",
-              coordinates: [ev.longitude, ev.latitude],
-            },
-          })),
-        });
-      }
+
+      el.addEventListener("mouseenter", () => {
+        el.style.transform = "scale(1.3)";
+        el.style.zIndex = "1000";
+        setHoveredEvent(ev);
+      });
+
+      el.addEventListener("mouseleave", () => {
+        el.style.transform = "scale(1)";
+        el.style.zIndex = "auto";
+        setHoveredEvent(null);
+      });
+
+      el.addEventListener("click", () => {
+        setSelectedEvent(ev);
+      });
+
+      const marker = new window.mapboxgl.Marker(el)
+        .setLngLat([ev.longitude, ev.latitude])
+        .addTo(mapRef.current);
+
+      markersRef.current.push(marker);
+    });
+
+    // Add pulse animation style
+    if (!document.getElementById("pulse-style")) {
+      const style = document.createElement("style");
+      style.id = "pulse-style";
+      style.textContent = `
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
+        }
+      `;
+      document.head.appendChild(style);
     }
   };
 
@@ -394,7 +220,7 @@ export default function MapView({
       </div>
 
       {/* Map Style Selector */}
-      <div className="absolute bottom-56 left-4 bg-white/95 backdrop-blur-sm rounded-lg shadow-lg z-10 overflow-hidden">
+      <div className="absolute top-4 right-4 bg-white/95 backdrop-blur-sm rounded-lg shadow-lg z-10 overflow-hidden">
         {mapStyles.map((style) => (
           <button
             key={style.id}
@@ -413,96 +239,40 @@ export default function MapView({
 
       {/* Legend */}
       <div className="absolute bottom-20 right-4 bg-white/95 backdrop-blur-sm px-4 py-3 rounded-lg shadow-lg z-10">
-        <h4 className="text-xs font-bold text-gray-800 mb-2">
-          {mapRef.current && mapRef.current.getZoom() >= 9
-            ? "Magnitude"
-            : "Seismic Activity"}
-        </h4>
-        {mapRef.current && mapRef.current.getZoom() >= 9 ? (
-          <div className="space-y-1.5 text-xs">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-red-600"></div>
-              <span className="text-gray-700">≥ 7.0 Major</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-orange-600"></div>
-              <span className="text-gray-700">6.0-6.9 Strong</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-yellow-600"></div>
-              <span className="text-gray-700">5.0-5.9 Moderate</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-              <span className="text-gray-700">4.0-4.9 Light</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-green-500"></div>
-              <span className="text-gray-700">&lt; 4.0 Minor</span>
-            </div>
+        <h4 className="text-xs font-bold text-gray-800 mb-2">Magnitude</h4>
+        <div className="space-y-1.5 text-xs">
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-red-600"></div>
+            <span className="text-gray-700">≥ 7.0</span>
           </div>
-        ) : (
-          <div className="space-y-1.5 text-xs">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-2 bg-gradient-to-r from-blue-500 via-yellow-400 to-red-600 rounded"></div>
-            </div>
-            <div className="text-gray-600 text-[10px]">
-              Low → High frequency
-            </div>
-            <div className="text-gray-500 text-[10px] mt-2">
-              Zoom in to see details
-            </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-orange-600"></div>
+            <span className="text-gray-700">6.0 - 6.9</span>
           </div>
-        )}
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-yellow-600"></div>
+            <span className="text-gray-700">5.0 - 5.9</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+            <span className="text-gray-700">4.0 - 4.9</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-green-500"></div>
+            <span className="text-gray-700">&lt; 4.0</span>
+          </div>
+        </div>
       </div>
 
       {/* Hover Tooltip */}
       {hoveredEvent && !selectedEvent && (
         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 pointer-events-none z-20">
-          <div className="bg-gray-900 text-white px-4 py-3 rounded-lg text-xs shadow-xl max-w-xs">
-            <div className="font-bold text-sm mb-1">{hoveredEvent.place}</div>
-            <div className="space-y-1">
-              <div className="flex items-center justify-between gap-4">
-                <span className="text-gray-300">Magnitude:</span>
-                <span className="font-semibold">
-                  M{hoveredEvent.magnitude.toFixed(1)}
-                  <span
-                    className={`ml-2 text-xs ${
-                      hoveredEvent.magnitude >= 6
-                        ? "text-red-400"
-                        : hoveredEvent.magnitude >= 5
-                        ? "text-orange-400"
-                        : hoveredEvent.magnitude >= 4
-                        ? "text-yellow-400"
-                        : "text-green-400"
-                    }`}
-                  >
-                    {hoveredEvent.magnitude >= 6
-                      ? "STRONG"
-                      : hoveredEvent.magnitude >= 5
-                      ? "MODERATE"
-                      : hoveredEvent.magnitude >= 4
-                      ? "LIGHT"
-                      : "MINOR"}
-                  </span>
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-4">
-                <span className="text-gray-300">Depth:</span>
-                <span className="font-semibold">{hoveredEvent.depth}km</span>
-              </div>
-              <div className="flex items-center justify-between gap-4">
-                <span className="text-gray-300">Time:</span>
-                <span className="font-semibold text-xs">
-                  {new Date(hoveredEvent.time).toLocaleString("en-PH", {
-                    timeZone: "Asia/Manila",
-                    month: "short",
-                    day: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </span>
-              </div>
+          <div className="bg-gray-900 text-white px-4 py-2 rounded-lg text-xs whitespace-nowrap shadow-xl">
+            <div className="font-bold">
+              {hoveredEvent.place || hoveredEvent.raw?.place}
+            </div>
+            <div>
+              M{hoveredEvent.magnitude.toFixed(1)} • {hoveredEvent.depth}km deep
             </div>
           </div>
         </div>

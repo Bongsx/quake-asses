@@ -1,4 +1,3 @@
-// firebase-admin.js
 import admin from "firebase-admin";
 import fs from "fs";
 import path from "path";
@@ -12,21 +11,18 @@ try {
   const saPath = process.env.SERVICE_ACCOUNT_PATH || "./serviceAccountKey.json";
 
   if (fs.existsSync(saPath)) {
-    // 🖥️ Local
+    // 🖥️ Local file
     serviceAccount = JSON.parse(fs.readFileSync(path.resolve(saPath), "utf8"));
     console.log("✅ Loaded Firebase service account from local file");
-  } else if (process.env.FIREBASE_SERVICE_ACCOUNT_BASE64) {
-    // ☁️ Vercel Base64
-    const decoded = Buffer.from(
-      process.env.FIREBASE_SERVICE_ACCOUNT_BASE64.trim(),
-      "base64"
-    ).toString("utf8");
-
-    // ensure it's valid JSON
-    serviceAccount = JSON.parse(decoded);
-    console.log(
-      "✅ Loaded Firebase service account from Base64 environment variable"
-    );
+  } else if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+    // ☁️ Environment variable (Vercel)
+    const jsonString = process.env.FIREBASE_SERVICE_ACCOUNT.replace(
+      /\\n/g,
+      "\n"
+    ) // fix escaped newlines
+      .trim();
+    serviceAccount = JSON.parse(jsonString);
+    console.log("✅ Loaded Firebase service account from environment variable");
   } else {
     throw new Error("❌ No service account found. Check configuration.");
   }

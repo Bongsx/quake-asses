@@ -8,22 +8,52 @@ dotenv.config();
 
 let serviceAccount = null;
 
-// Check if the JSON file exists locally
+// 🗂️ Path to local JSON file
 const saPath = process.env.SERVICE_ACCOUNT_PATH || "./serviceAccountKey.json";
 
-if (fs.existsSync(saPath)) {
-  // 🖥️ Local environment (with file)
-  serviceAccount = JSON.parse(fs.readFileSync(path.resolve(saPath), "utf8"));
-  console.log("✅ Loaded Firebase service account from local file");
-} else if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-  // ☁️ Vercel environment (from env variable)
-  serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-  console.log("✅ Loaded Firebase service account from environment variable");
-} else {
-  console.error("❌ No service account found. Check your configuration.");
+try {
+  if (fs.existsSync(saPath)) {
+    // 🖥️ Local environment
+    serviceAccount = JSON.parse(fs.readFileSync(path.resolve(saPath), "utf8"));
+    console.log("✅ Loaded Firebase service account from local file");
+  } else if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+    // ☁️ Vercel environment — may contain escaped JSON
+    try {
+      serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+      console.log("✅ Loaded Firebase service account from JSON env variable");
+    } catch (err) {
+      // Handle common escape issues (e.g., double-escaped quotes)
+      console.warn(
+        "⚠️ Failed to parse FIREBASE_SERVICE_ACCOUNT directly, trying to fix escape issues..."
+      );
+      const fixed = process.env.FIREBASE_SERVICE_ACCOUNT.replace(/\\n/g, "\n")
+        .replace(/\\"/g, '"')
+        .replace(/^"|"$/g, "");
+      serviceAccount = JSON.parse(fixed);
+      console.log(
+        "✅ Loaded Firebase service account after fixing escape issues"
+      );
+    }
+  } else if (process.env.FIREBASE_SERVICE_ACCOUNT_BASE64) {
+    // 🧩 Base64 encoded version (safe for Vercel)
+    const decoded = Buffer.from(
+      process.env.FIREBASE_SERVICE_ACCOUNT_BASE64,
+      "base64"
+    ).toString("utf8");
+    serviceAccount = JSON.parse(decoded);
+    console.log("✅ Loaded Firebase service account from base64 variable");
+  } else {
+    throw new Error("❌ No service account found. Check your configuration.");
+  }
+} catch (error) {
+  console.error(
+    "🔥 Failed to load or parse Firebase service account:",
+    error.message
+  );
   process.exit(1);
 }
 
+// 🚀 Initialize Firebase Admin
 if (!admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),

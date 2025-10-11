@@ -42,6 +42,20 @@ const USGS_API_PHILIPPINES =
 // Cache for reverse geocoding
 const locationCache = new Map();
 
+function sanitizeRaw(raw) {
+  return {
+    dateTimeStr: raw.dateTimeStr || "",
+    location: raw.location || "",
+    mag: raw.mag != null ? raw.mag : 0,
+    depth: raw.depth != null ? raw.depth : 0,
+    time: raw.time || 0,
+    place: raw.place || "",
+    title: raw.title || "",
+    status: raw.status || "",
+    type: raw.type || "",
+  };
+}
+
 function usgsFeatureToEvent(feature) {
   const coords = feature.geometry.coordinates;
   const timestamp = feature.properties.time;
@@ -74,7 +88,7 @@ function usgsFeatureToEvent(feature) {
     place: location,
     type: feature.properties.type || "earthquake",
     url: feature.properties.url,
-    raw: {
+    raw: sanitizeRaw({
       dateTimeStr,
       location,
       mag: feature.properties.mag,
@@ -84,7 +98,7 @@ function usgsFeatureToEvent(feature) {
       title: feature.properties.title,
       status: feature.properties.status,
       type: feature.properties.type,
-    },
+    }),
   };
 }
 

@@ -1,3 +1,8 @@
+const axios = require("axios");
+const cheerio = require("cheerio");
+const https = require("https");
+
+const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 async function scrapePHIVOLCS(retries = 3) {
   const url = "https://earthquake.phivolcs.dost.gov.ph/";
   const axiosConfig = {

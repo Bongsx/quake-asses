@@ -27,15 +27,14 @@ const EarthquakeEventsList = () => {
   const [selectedRegion, setSelectedRegion] = useState("all");
   const navigate = useNavigate();
 
-  // Region coordinates
   const regions = {
     all: { name: "All Regions", lat: [4, 21], lon: [116, 127] },
-    luzon: { name: "Luzon", lat: [14, 21], lon: [119.5, 122.5] },
-    visayas: { name: "Visayas", lat: [9.5, 12.5], lon: [123.5, 125.5] },
-    mindanao: { name: "Mindanao", lat: [4, 10], lon: [121, 127] },
+    luzon: { name: "Luzon", lat: [12.5, 21], lon: [116, 123.5] },
+    visayas: { name: "Visayas", lat: [8.5, 12.5], lon: [122, 127] },
+    mindanao: { name: "Mindanao", lat: [4, 8.5], lon: [121, 127] },
   };
 
-  // ✅ Fetch both structures: events/<eventId> and events/<date>/<eventId>
+  // Fetch events from Firebase
   useEffect(() => {
     const db = getDatabase();
     const eventsRef = ref(db, "events");
@@ -46,21 +45,17 @@ const EarthquakeEventsList = () => {
         const data = snapshot.val() || {};
         let combinedEvents = [];
 
-        // 🔹 Support for events/<date>/<eventId> (grouped by date)
         Object.entries(data).forEach(([key, value]) => {
           if (typeof value === "object") {
             const firstValue = Object.values(value)[0];
             if (firstValue?.id) {
-              // Nested events under a date folder
               combinedEvents.push(...Object.values(value));
             } else {
-              // Direct single event (legacy structure)
               if (value.id) combinedEvents.push(value);
             }
           }
         });
 
-        // Sort latest first
         combinedEvents.sort((a, b) => b.time - a.time);
         setEvents(combinedEvents);
         setLoading(false);
@@ -123,11 +118,15 @@ const EarthquakeEventsList = () => {
   const getDetailedLocation = (ev) =>
     locationDetails[ev.id] || ev.place || "Unknown Location";
 
+  // Filter by region
   const filterByRegion = (event) => {
     if (selectedRegion === "all") return true;
+
+    const lat = parseFloat(event.latitude);
+    const lon = parseFloat(event.longitude);
+    if (isNaN(lat) || isNaN(lon)) return false;
+
     const region = regions[selectedRegion];
-    const lat = event.latitude;
-    const lon = event.longitude;
     return (
       lat >= region.lat[0] &&
       lat <= region.lat[1] &&
@@ -149,9 +148,9 @@ const EarthquakeEventsList = () => {
     );
   };
 
-  const filteredEvents = events.filter(
-    (ev) => filterByRegion(ev) && filterBySearch(ev)
-  );
+  const filteredEvents = React.useMemo(() => {
+    return events.filter((ev) => filterByRegion(ev) && filterBySearch(ev));
+  }, [events, selectedRegion, searchQuery, locationDetails]);
 
   const displayedEvents = filteredEvents.slice(0, 50);
 
@@ -184,7 +183,6 @@ const EarthquakeEventsList = () => {
     return "Minor";
   };
 
-  // Loading & Error States
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 to-gray-100">
@@ -212,7 +210,6 @@ const EarthquakeEventsList = () => {
     );
   }
 
-  // Main UI
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-gray-50 to-blue-100 py-6 px-4">
       <div className="max-w-7xl mx-auto">
@@ -345,7 +342,7 @@ const EarthquakeEventsList = () => {
 
               return (
                 <div
-                  key={event.id}
+                  key={`${event.id}_${event.time}`}
                   className="bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 p-6 border border-gray-100"
                 >
                   <div className="flex items-start justify-between mb-4">
@@ -395,8 +392,12 @@ const EarthquakeEventsList = () => {
                         )}
                         <p className="text-sm text-gray-600 mt-1">
                           <span className="font-medium">
-                            {event.latitude.toFixed(4)}°N,{" "}
-                            {event.longitude.toFixed(4)}°E
+                            {event.latitude ? event.latitude.toFixed(4) : "N/A"}
+                            °N,{" "}
+                            {event.longitude
+                              ? event.longitude.toFixed(4)
+                              : "N/A"}
+                            °E
                           </span>
                           <span className="mx-2">•</span>
                           <span>Depth: {event.depth} km</span>

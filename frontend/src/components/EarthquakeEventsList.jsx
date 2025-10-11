@@ -31,7 +31,7 @@ const EarthquakeEventsList = () => {
   const regions = {
     all: { name: "All Regions", lat: [4, 21], lon: [116, 127] },
     luzon: { name: "Luzon", lat: [14, 21], lon: [119.5, 122.5] },
-    visayas: { name: "Visayas", lat: [9, 13], lon: [122, 125] },
+    visayas: { name: "Visayas", lat: [9.5, 12.5], lon: [123.5, 125.5] },
     mindanao: { name: "Mindanao", lat: [4, 10], lon: [121, 127] },
   };
 

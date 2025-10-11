@@ -11,16 +11,12 @@ try {
   const saPath = process.env.SERVICE_ACCOUNT_PATH || "./serviceAccountKey.json";
 
   if (fs.existsSync(saPath)) {
-    // 🖥️ Local file
+    // Local file
     serviceAccount = JSON.parse(fs.readFileSync(path.resolve(saPath), "utf8"));
     console.log("✅ Loaded Firebase service account from local file");
   } else if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-    // ☁️ Environment variable (Vercel)
-    const jsonString = process.env.FIREBASE_SERVICE_ACCOUNT.replace(
-      /\\n/g,
-      "\n"
-    ) // fix escaped newlines
-      .trim();
+    // Vercel env variable
+    const jsonString = process.env.FIREBASE_SERVICE_ACCOUNT.trim();
     serviceAccount = JSON.parse(jsonString);
     console.log("✅ Loaded Firebase service account from environment variable");
   } else {

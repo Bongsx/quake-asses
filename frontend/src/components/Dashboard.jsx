@@ -9,6 +9,7 @@ import {
   MapPin,
 } from "lucide-react";
 import AiAlert from "./AiAlert";
+import SuggestionForm from "./SuggestionForm";
 import { useNavigate } from "react-router-dom";
 
 const MAPBOX_TOKEN =
@@ -226,7 +227,8 @@ export default function Dashboard() {
           </p>
         ) : (
           <div className="space-y-3 max-h-96 overflow-y-auto">
-            {events.slice(0, 20).map((ev) => {
+            {/* ✅ Added index to ensure unique keys */}
+            {events.slice(0, 20).map((ev, index) => {
               const magnitude = ev.magnitude || 0;
               const magnitudeColor =
                 magnitude >= 6
@@ -241,7 +243,7 @@ export default function Dashboard() {
 
               return (
                 <div
-                  key={ev.id}
+                  key={`${ev.id || "event"}_${index}`} // ✅ UNIQUE KEY FIX HERE
                   className="flex items-start gap-4 p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
                 >
                   <div className="flex-shrink-0">
@@ -281,6 +283,23 @@ export default function Dashboard() {
             })}
           </div>
         )}
+
+        {/* Suggestions Section */}
+        <div className="max-w-7xl mx-auto mt-10">
+          <div className="bg-white rounded-lg shadow-lg p-6 mb-4">
+            <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+              <Activity className="w-6 h-6 text-blue-600" />
+              We’d Love Your Feedback
+            </h3>
+            <p className="text-gray-600 mb-6">
+              Help us improve Quake Assess by sharing your thoughts, feature
+              ideas, or any issues you’ve noticed. Your feedback matters.
+            </p>
+
+            {/* Suggestion Form Component */}
+            <SuggestionForm />
+          </div>
+        </div>
       </div>
     </div>
   );
